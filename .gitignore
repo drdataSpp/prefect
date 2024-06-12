@@ -1,0 +1,5 @@
+# Ignore the prefect-env folder
+prefect-env/
+
+# Ignore the list folder
+list/
