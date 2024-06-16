@@ -31,7 +31,7 @@ def extract_project_params(path):
     except Exception as e:
         print("There was an Error while opening the params file:", str(e))
 
-@task(retries = 3, retry_delay_seconds=2)
+@task(retries = 3, retry_delay_seconds=900)
 def preloadstep_file_watcher(params):
     """ This function is used to check whether the source file exists, if not retries after 15 mins for 3 time """
     
