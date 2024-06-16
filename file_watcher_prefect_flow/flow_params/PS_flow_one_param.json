@@ -1,0 +1,6 @@
+{
+	"DATA_DIR" 		  	: "source_data_dir",
+	"DATA_FILE_NAME" 	: "orders",
+	"FILE_EXTENSION"	: ".csv",
+	"FILE_SIZE_THRESHOLD_BYTES"	: 40
+}
