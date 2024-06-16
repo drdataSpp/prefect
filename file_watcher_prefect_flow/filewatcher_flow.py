@@ -31,12 +31,12 @@ def extract_project_params(path):
     except Exception as e:
         print("There was an Error while opening the params file:", str(e))
 
-@task
-def preloadstep_file_watcher():
-    """ This function is used to check whether the source file exists """
+@task(retries = 3, retry_delay_seconds=2)
+def preloadstep_file_watcher(params):
+    """ This function is used to check whether the source file exists, if not retries after 15 mins for 3 time """
     
     try:
-        ps_file = extract_project_params(params_path)
+        ps_file = params
 
         data_dir = ps_file['DATA_DIR']
         data_file_name = ps_file['DATA_FILE_NAME']
@@ -46,14 +46,22 @@ def preloadstep_file_watcher():
         externsion_to_look_for = '*' + file_ext
 
         matching_files = glob.glob(f'{source_data_dir}/{data_file_name + externsion_to_look_for}')
-        output = matching_files
-    
-    except Exception as e:
-        error = "Error in searching for source data file:" + str(e)
-        output = error
 
-    finally:
+        if not matching_files:
+            raise Exception(f"Source File {data_file_name}* is missing. Retrying...")
+
+        output = matching_files
+
+        file_count = collections.Counter(matching_files)
+        total_file_retrieved = sum(file_count.values())
+
+        print(total_file_retrieved)
+
         return output
+
+    except Exception as e:
+        error = "Error in File Watcher Step: " + str(e)
+        raise Exception(error)
         
 @task
 def preloadstep_file_count_check(matched_file_dict):
@@ -79,10 +87,11 @@ def preloadstep_file_count_check(matched_file_dict):
         print("Error while counting file: ", str(e))
 
 @task
-def preloadstep_file_size_check():
+def preloadstep_file_size_check(params, file_process_flag, path):
 
-    file_size_threshold = extract_project_params(params_path)['FILE_SIZE_THRESHOLD_BYTES']
-    isFileReady, filePath = preloadstep_file_count_check(preloadstep_file_watcher())
+    file_size_threshold = params['FILE_SIZE_THRESHOLD_BYTES']
+    isFileReady = file_process_flag
+    filePath = path
 
     try:
         if isFileReady:
@@ -102,14 +111,14 @@ def preloadstep_file_size_check():
                 
 
 @flow
-def filewatcher_prefect_flow(name='filewatcher_prefect_flow'):
+def filewatcher_prefect_flow(name='filewatcher_prefect_flow', log_prints=True):
     
     prefect_logger = get_run_logger()
 
     extract_params = extract_project_params(params_path)
-    file_exist_check = preloadstep_file_watcher(wait_for = extract_params)
-    file_count_check = preloadstep_file_count_check(file_exist_check, wait_for = file_exist_check)
-    output = preloadstep_file_size_check(wait_for = file_count_check)
+    file_exist_check = preloadstep_file_watcher(extract_params, wait_for = extract_params)
+    file_process_flag, file_path = preloadstep_file_count_check(file_exist_check, wait_for=file_exist_check)
+    output = preloadstep_file_size_check(extract_params, file_process_flag, file_path, wait_for=[file_process_flag, file_path])
 
     if output:
         prefect_logger.info('Flow will continue as the file is greater than the threshold.')
