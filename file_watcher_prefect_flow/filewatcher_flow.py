@@ -107,9 +107,9 @@ def filewatcher_prefect_flow(name='filewatcher_prefect_flow'):
     prefect_logger = get_run_logger()
 
     extract_params = extract_project_params(params_path)
-    file_exist_check = preloadstep_file_watcher()
-    file_count_check = preloadstep_file_count_check(file_exist_check)
-    output = preloadstep_file_size_check()
+    file_exist_check = preloadstep_file_watcher(wait_for = extract_params)
+    file_count_check = preloadstep_file_count_check(file_exist_check, wait_for = file_exist_check)
+    output = preloadstep_file_size_check(wait_for = file_count_check)
 
     if output:
         prefect_logger.info('Flow will continue as the file is greater than the threshold.')
@@ -118,4 +118,5 @@ def filewatcher_prefect_flow(name='filewatcher_prefect_flow'):
 
     ## Add more ETL tasks after checking the file size, example, if the files is greater than the threshold then process else end the flow
 
-filewatcher_prefect_flow()
+if __name__ == "__main__":
+    filewatcher_prefect_flow()
