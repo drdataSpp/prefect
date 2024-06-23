@@ -2,5 +2,7 @@
 	"DATA_DIR" 		  	: "source_data_dir",
 	"DATA_FILE_NAME" 	: "orders",
 	"FILE_EXTENSION"	: ".csv",
+	"FW_RETRY_THRESHOLD": 3,
+	"FW_RETRY_WAIT_SECS": 900,
 	"FILE_SIZE_THRESHOLD_BYTES"	: 40
 }

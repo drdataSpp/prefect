@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import glob
 import collections
 import prefect
@@ -31,37 +32,46 @@ def extract_project_params(path):
     except Exception as e:
         print("There was an Error while opening the params file:", str(e))
 
-@task(retries = 3, retry_delay_seconds=900)
+
+@task
 def preloadstep_file_watcher(params):
-    """ This function is used to check whether the source file exists, if not retries after 15 mins for 3 time """
-    
+    """ 
+    This function is used to check whether the source file exists,
+    if not retries after a specified time for a specified number of times.
+    """
     try:
         ps_file = params
 
         data_dir = ps_file['DATA_DIR']
         data_file_name = ps_file['DATA_FILE_NAME']
         file_ext = ps_file['FILE_EXTENSION']
+        fw_tries = ps_file['FW_RETRY_THRESHOLD']
+        fw_wait_secs = ps_file['FW_RETRY_WAIT_SECS'] ##i.e., 900 secs = 15 mins 
 
         source_data_dir = os.path.join(os.getcwd(), project_dir, data_dir)
-        externsion_to_look_for = '*' + file_ext
+        extension_to_look_for = '*' + file_ext
 
-        matching_files = glob.glob(f'{source_data_dir}/{data_file_name + externsion_to_look_for}')
+        for attempt in range(1, fw_tries + 1):
+            matching_files = glob.glob(f'{source_data_dir}/{data_file_name + extension_to_look_for}')
 
-        if not matching_files:
-            raise Exception(f"Source File {data_file_name}* is missing. Retrying...")
+            if matching_files:
+                # Files found, return the list
+                output = matching_files
+                print('Source file found!')
+                return output
 
-        output = matching_files
+            # Files not found, wait and retry
+            if attempt < fw_tries:
+                print(f"Attempt {attempt} failed. Retrying in {fw_wait_secs} seconds...")
+                time.sleep(fw_wait_secs)
 
-        file_count = collections.Counter(matching_files)
-        total_file_retrieved = sum(file_count.values())
-
-        print(total_file_retrieved)
-
-        return output
+        # If all attempts failed
+        raise Exception(f"Source File {data_file_name}* is missing after {fw_tries} attempts.")
 
     except Exception as e:
         error = "Error in File Watcher Step: " + str(e)
-        raise Exception(error)
+        print(error)
+
         
 @task
 def preloadstep_file_count_check(matched_file_dict):
@@ -117,13 +127,19 @@ def filewatcher_prefect_flow(name='filewatcher_prefect_flow', log_prints=True):
 
     extract_params = extract_project_params(params_path)
     file_exist_check = preloadstep_file_watcher(extract_params, wait_for = extract_params)
-    file_process_flag, file_path = preloadstep_file_count_check(file_exist_check, wait_for=file_exist_check)
-    output = preloadstep_file_size_check(extract_params, file_process_flag, file_path, wait_for=[file_process_flag, file_path])
 
-    if output:
-        prefect_logger.info('Flow will continue as the file is greater than the threshold.')
-    else:
-        prefect_logger.info('Flow will stop as the source file is lesser than the threshold.')
+    # The file path dict will be empty if no files were found as part of the FW task, thus skipping downstream tasks.
+    if file_exist_check is None:
+        prefect_logger.info('Flow stopped as Source file is missing.') ## We can add a callout if source file is missing or try different callout functions as part of this else block.
+
+    else:        
+        file_process_flag, file_path = preloadstep_file_count_check(file_exist_check, wait_for=file_exist_check)
+        output = preloadstep_file_size_check(extract_params, file_process_flag, file_path, wait_for=[file_process_flag, file_path])
+
+        if output:
+            prefect_logger.info('Flow will continue as the file is greater than the threshold.')
+        else:
+            prefect_logger.info('Flow will stop as the source file is lesser than the threshold.')
 
     ## Add more ETL tasks after checking the file size, example, if the files is greater than the threshold then process else end the flow
 
